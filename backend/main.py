@@ -1,7 +1,8 @@
 """
-Hummed — Backend API
+VOICEtoMIDI — Backend API
 Run with: uvicorn main:app --reload --port 8000
 """
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.websockets import WebSocket
@@ -12,11 +13,14 @@ from routers.synthesize import router as synthesize_router
 from routers.export import router as export_router
 from routers.project import router as project_router
 
-app = FastAPI(title="Hummed API", version="0.1.0")
+app = FastAPI(title="VOICEtoMIDI API", version="0.1.0")
+
+_default_origins = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", _default_origins).split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
