@@ -1,0 +1,153 @@
+import { useState } from 'react'
+import { exportProject, saveProject, listProjects, loadProject } from '../api/client'
+import useProjectStore from '../store/projectStore'
+
+function download(blob, name) {
+  const url = URL.createObjectURL(blob)
+  Object.assign(document.createElement('a'), { href: url, download: name }).click()
+  URL.revokeObjectURL(url)
+}
+
+export default function ExportPanel() {
+  const { tracks, bpm, projectName, setProjectName, setProjectId, reset } = useProjectStore()
+  const notes = tracks.flatMap(t => t.notes)
+  const instrument = tracks.find(t => t.type === 'instrument')?.instrument || 'piano'
+
+  const [status, setStatus] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [projects, setProjects] = useState([])
+  const [showLoad, setShowLoad] = useState(false)
+
+  const handleExport = async (fmt) => {
+    setLoading(true)
+    setStatus(`Exporting ${fmt.toUpperCase()}…`)
+    try {
+      const blob = await exportProject(notes, [], instrument, bpm, fmt)
+      download(blob, `${projectName}.${fmt === 'midi' ? 'mid' : fmt}`)
+      setStatus(`✓ Exported`)
+    } catch (e) { setStatus(`Error: ${e.message}`) }
+    finally { setLoading(false) }
+  }
+
+  const handleSave = async () => {
+    setLoading(true)
+    try {
+      const r = await saveProject({ name: projectName, bpm, instrument, notes })
+      setProjectId(r.project_id)
+      setStatus(`✓ Saved`)
+    } catch (e) { setStatus(`Error: ${e.message}`) }
+    finally { setLoading(false) }
+  }
+
+  const handleLoad = async (pid) => {
+    const data = await loadProject(pid)
+    useProjectStore.setState({
+      instrument: data.instrument || 'piano', bpm: data.bpm || 120,
+      projectName: data.name || 'Untitled', projectId: pid,
+    })
+    setShowLoad(false)
+    setStatus(`✓ Loaded "${data.name}"`)
+  }
+
+  return (
+    <div style={s.wrap}>
+      <div style={s.header}>
+        <span style={s.title}>PROJECT</span>
+      </div>
+
+      <div style={s.row}>
+        <input
+          type="text" value={projectName}
+          onChange={e => setProjectName(e.target.value)}
+          style={s.nameInput} placeholder="Project name"
+        />
+      </div>
+
+      <div style={s.row}>
+        <button style={s.btn} onClick={handleSave} disabled={loading}>Save</button>
+        <button style={s.btnGhost} onClick={async () => { const r = await listProjects(); setProjects(r.projects); setShowLoad(true) }}>Load</button>
+        <button style={s.btnGhost} onClick={reset}>New</button>
+      </div>
+
+      <div style={s.divider} />
+      <span style={s.exportLabel}>EXPORT</span>
+
+      <div style={s.row}>
+        {['wav','mp3','midi'].map(fmt => (
+          <button
+            key={fmt} style={s.exportBtn}
+            onClick={() => handleExport(fmt)}
+            disabled={loading || notes.length === 0}
+          >
+            {fmt.toUpperCase()}
+          </button>
+        ))}
+      </div>
+
+      {status && (
+        <p style={{ ...s.status, color: status.startsWith('✓') ? 'var(--teal)' : '#e74c3c' }}>
+          {status}
+        </p>
+      )}
+
+      {showLoad && (
+        <div style={s.modal}>
+          <p style={s.modalTitle}>Saved Projects</p>
+          {projects.length === 0 && <p style={s.modalEmpty}>No saved projects</p>}
+          {projects.map(p => (
+            <div key={p.project_id} style={s.projectRow} onClick={() => handleLoad(p.project_id)}>
+              <span style={s.projectName}>{p.name}</span>
+              <span style={s.projectId}>#{p.project_id}</span>
+            </div>
+          ))}
+          <button style={s.btnGhost} onClick={() => setShowLoad(false)}>Cancel</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+const s = {
+  wrap: {
+    background: '#f0eeea', border: '1px solid #c8c6c2',
+    borderRadius: 'var(--radius-lg)', padding: '12px 14px',
+    color: '#3a3a38',
+  },
+  header: { marginBottom: 10 },
+  title: { fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700, color: '#888684', letterSpacing: 1, textTransform: 'uppercase' },
+  row: { display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' },
+  nameInput: {
+    flex: 1, background: '#e4e2de', border: '1px solid #c8c6c2',
+    borderRadius: 'var(--radius)', color: '#3a3a38', padding: '6px 10px',
+    fontSize: 12, fontFamily: 'var(--font-ui)',
+  },
+  btn: {
+    background: 'var(--teal)', color: '#000', border: 'none',
+    borderRadius: 'var(--radius)', padding: '6px 14px',
+    fontWeight: 700, fontSize: 11, boxShadow: '0 0 8px var(--teal-glow)',
+  },
+  btnGhost: {
+    background: '#e4e2de', color: '#686664',
+    border: '1px solid #c8c6c2', borderRadius: 'var(--radius)',
+    padding: '6px 12px', fontWeight: 600, fontSize: 11,
+  },
+  divider: { height: 1, background: '#c8c6c2', margin: '8px 0' },
+  exportLabel: { display: 'block', fontFamily: 'var(--font-mono)', fontSize: 9, color: '#888684', letterSpacing: 1.5, marginBottom: 8 },
+  exportBtn: {
+    background: '#e4e2de', color: 'var(--purple)',
+    border: '1px solid #c8c6c2', borderRadius: 'var(--radius)',
+    padding: '6px 14px', fontWeight: 700, fontSize: 11,
+    fontFamily: 'var(--font-mono)', letterSpacing: 1,
+  },
+  status: { fontSize: 11, marginTop: 6, fontFamily: 'var(--font-mono)' },
+  modal: { background: '#e4e2de', border: '1px solid #c8c6c2', borderRadius: 'var(--radius)', padding: 10, marginTop: 8 },
+  modalTitle: { fontFamily: 'var(--font-mono)', fontSize: 10, color: '#686664', marginBottom: 8 },
+  modalEmpty: { fontSize: 11, color: '#888684' },
+  projectRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    padding: '6px 8px', cursor: 'pointer', borderRadius: 'var(--radius)',
+    background: '#d8d6d2', marginBottom: 4,
+  },
+  projectName: { fontSize: 12, color: '#3a3a38' },
+  projectId: { fontSize: 10, color: '#888684', fontFamily: 'var(--font-mono)' },
+}

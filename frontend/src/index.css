@@ -1,0 +1,42 @@
+:root {
+  --bg:          #3a3a38;
+  --surface:     #444441;
+  --surface-2:   #4f4f4c;
+  --surface-3:   #5a5a57;
+  --border:      #686864;
+  --border-2:    #787874;
+  --accent:      #ff5c1a;
+  --accent-glow: rgba(255, 92, 26, 0.3);
+  --teal:        #00e5d4;
+  --teal-glow:   rgba(0, 229, 212, 0.25);
+  --purple:      #a88df5;
+  --purple-dim:  rgba(168, 141, 245, 0.3);
+  --text:        #eeecea;
+  --text-muted:  #a8a8a4;
+  --text-dim:    #727270;
+  --font-mono:   'Chivo Mono', 'Courier New', monospace;
+  --font-ui:     'Outfit', system-ui, sans-serif;
+  --radius:      6px;
+  --radius-lg:   10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+
+/* Utility */
+button { font-family: var(--font-ui); cursor: pointer; }
+input, select { font-family: var(--font-ui); }
