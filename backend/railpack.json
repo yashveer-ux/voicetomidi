@@ -1,0 +1,3 @@
+{
+  "aptPackages": ["libfluidsynth-dev", "fluidsynth"]
+}
