@@ -107,7 +107,7 @@ export default function App() {
   }, [playNotes])
 
   return (
-    <div style={s.app}>
+    <div style={s.app} className="app-root">
       {/* ── Header ── */}
       <div style={s.header}>
         <div style={s.logo}>
@@ -127,12 +127,14 @@ export default function App() {
       />
 
       {/* ── DAW Body ── */}
-      <div style={s.body}>
+      <div style={s.body} className="app-body">
         {/* Track List */}
-        <TrackList onPlayTrack={handlePlayTrack} />
+        <div className="track-panel">
+          <TrackList onPlayTrack={handlePlayTrack} />
+        </div>
 
         {/* Center: Roll + controls */}
-        <div style={s.center}>
+        <div style={s.center} className="app-center">
           <ArrangementView />
           <PianoRoll />
 
@@ -145,7 +147,7 @@ export default function App() {
         </div>
 
         {/* Right: Export */}
-        <div style={s.right}>
+        <div style={s.right} className="export-panel">
           <ExportPanel />
         </div>
       </div>

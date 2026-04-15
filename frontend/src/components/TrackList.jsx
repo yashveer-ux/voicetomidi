@@ -8,7 +8,7 @@ export default function TrackList({ onPlayTrack }) {
   const [editingId, setEditingId] = useState(null)
 
   return (
-    <div style={s.wrap}>
+    <div style={s.wrap} className="track-list-inner">
       <div style={s.header}>
         <span style={s.headerLabel}>TRACKS</span>
         <div style={s.addRow}>
