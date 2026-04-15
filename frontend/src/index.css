@@ -49,35 +49,33 @@ input, select { font-family: var(--font-ui); }
     overflow: auto;
   }
 
-  /* App shell */
   .app-root {
     height: auto !important;
     min-height: 100vh;
   }
 
-  /* Body: switch from 3-column row to single-column stack */
   .app-body {
-    flex-direction: column !important;
+    flex-direction: column;
     overflow: visible !important;
   }
 
-  /* Reorder sections: Piano Roll area first, then Tracks, then Export */
-  .app-center  { order: 1; }
-  .track-panel { order: 2; }
-  .export-panel { order: 3; }
-
-  /* TrackList: full width, remove right border */
-  .track-panel {
-    width: 100% !important;
+  .app-center {
+    order: 1;
   }
+
+  .track-panel {
+    order: 2;
+    width: 100%;
+  }
+
   .track-list-inner {
     width: 100% !important;
     border-right: none !important;
     border-bottom: 1px solid var(--border);
   }
 
-  /* ExportPanel: full width, remove left border */
   .export-panel {
+    order: 3;
     width: 100% !important;
     border-left: none !important;
     border-top: 1px solid var(--border);
