@@ -12,6 +12,7 @@ from routers.analyze import router as analyze_router
 from routers.synthesize import router as synthesize_router
 from routers.export import router as export_router
 from routers.project import router as project_router
+from routers.checkout import router as checkout_router
 
 app = FastAPI(title="VOICEtoMIDI API", version="0.1.0")
 
@@ -30,6 +31,7 @@ app.include_router(analyze_router)
 app.include_router(synthesize_router)
 app.include_router(export_router)
 app.include_router(project_router)
+app.include_router(checkout_router)
 
 
 @app.get("/health")
