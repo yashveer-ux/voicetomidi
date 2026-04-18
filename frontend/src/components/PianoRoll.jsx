@@ -5,7 +5,7 @@ import useProjectStore from '../store/projectStore'
 const MIDI_MIN = 36
 const MIDI_MAX = 96
 const PIANO_ROW_H = 14
-const PPS = 120
+const PPS_BASE = 120
 const RESIZE_PX = 8
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -16,10 +16,10 @@ function hexRgb(hex) {
   return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`
 }
 
-function hitTest(notes, x, y) {
+function hitTest(notes, x, y, pps) {
   for (let i = notes.length - 1; i >= 0; i--) {
     const n = notes[i]
-    const nx = n.start_time * PPS, nw = Math.max(n.duration * PPS, 6)
+    const nx = n.start_time * pps, nw = Math.max(n.duration * pps, 6)
     const ny = (MIDI_MAX - n.note) * PIANO_ROW_H
     if (x >= nx && x <= nx + nw && y >= ny && y < ny + PIANO_ROW_H) {
       return { index: i, zone: x >= nx + nw - RESIZE_PX ? 'resize' : 'move' }
@@ -35,6 +35,7 @@ export default function PianoRoll() {
   const marqueeRef = useRef(null)  // { sx, sy, ex, ey } while rubber-band selecting
   const selectedRef = useRef(new Set()) // indices of selected notes (ref = no re-render)
   const clipboardRef = useRef([])  // copied notes (relative to selection start)
+  const ppsRef = useRef(PPS_BASE)
 
   const { tracks, activeTrackId, updateNote, deleteNote, setTrackNotes, playheadPosition, setSelectedNoteIndices } = useProjectStore()
   const activeTrack = tracks.find(t => t.id === activeTrackId) || tracks[0]
@@ -55,7 +56,7 @@ export default function PianoRoll() {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
-    const W = Math.max(900, maxTime * PPS + 60)
+    const W = Math.max(900, maxTime * ppsRef.current + 60)
     canvas.width = W
     canvas.height = canvasH
     ctx.clearRect(0, 0, W, canvasH)
@@ -79,7 +80,7 @@ export default function PianoRoll() {
 
     // ── Beat / measure grid ──
     for (let t = 0; t < maxTime + 1; t += spb / 4) {
-      const x = t * PPS
+      const x = t * ppsRef.current
       const isBeat    = Math.abs((t / spb) % 1) < 0.005
       const isMeasure = Math.abs((t / (spb * 4)) % 1) < 0.005
       ctx.strokeStyle = isMeasure ? '#5e5e5a' : isBeat ? '#4e4e4a' : '#424240'
@@ -96,9 +97,9 @@ export default function PianoRoll() {
       const rgb = hexRgb(track.color)
       track.notes.forEach((note, idx) => {
         const isSelected = isActive && sel.has(idx)
-        const x = note.start_time * PPS
+        const x = note.start_time * ppsRef.current
         const y = (MIDI_MAX - note.note) * PIANO_ROW_H
-        const w = Math.max(note.duration * PPS, 6)
+        const w = Math.max(note.duration * ppsRef.current, 6)
         const vel = (note.velocity || 80) / 127
         const alpha = isActive ? (isSelected ? 0.95 : 0.5 + vel * 0.4) : 0.25
 
@@ -136,7 +137,7 @@ export default function PianoRoll() {
     }
 
     // ── Playhead ──
-    const playX = playheadPosition * PPS
+    const playX = playheadPosition * ppsRef.current
     ctx.strokeStyle = '#ff5c1a'; ctx.lineWidth = 1.5
     ctx.setLineDash([4, 3])
     ctx.beginPath(); ctx.moveTo(playX, 0); ctx.lineTo(playX, canvasH); ctx.stroke()
@@ -156,13 +157,18 @@ export default function PianoRoll() {
     return { x: e.clientX - r.left, y: e.clientY - r.top }
   }
 
+  const touchPos = (touch) => {
+    const r = canvasRef.current.getBoundingClientRect()
+    return { x: touch.clientX - r.left, y: touch.clientY - r.top }
+  }
+
   // Which note indices fall inside the marquee rect
   const notesInRect = (notes, m) => {
     const x1 = Math.min(m.sx, m.ex), x2 = Math.max(m.sx, m.ex)
     const y1 = Math.min(m.sy, m.ey), y2 = Math.max(m.sy, m.ey)
     const found = new Set()
     notes.forEach((n, i) => {
-      const nx = n.start_time * PPS, nw = Math.max(n.duration * PPS, 6)
+      const nx = n.start_time * ppsRef.current, nw = Math.max(n.duration * ppsRef.current, 6)
       const ny = (MIDI_MAX - n.note) * PIANO_ROW_H
       if (nx < x2 && nx + nw > x1 && ny < y2 && ny + PIANO_ROW_H > y1) found.add(i)
     })
@@ -176,7 +182,7 @@ export default function PianoRoll() {
 
     // Right-click → delete hovered note, or all selected if clicking a selected note
     if (e.button === 2) {
-      const hit = hitTest(activeTrack.notes, x, y)
+      const hit = hitTest(activeTrack.notes, x, y, ppsRef.current)
       if (hit) {
         if (selectedRef.current.has(hit.index) && selectedRef.current.size > 1) {
           setTrackNotes(activeTrackId, activeTrack.notes.filter((_, i) => !selectedRef.current.has(i)))
@@ -190,7 +196,7 @@ export default function PianoRoll() {
     }
     if (e.button !== 0) return
 
-    const hit = hitTest(activeTrack.notes, x, y)
+    const hit = hitTest(activeTrack.notes, x, y, ppsRef.current)
 
     if (hit) {
       // Shift+click → toggle this note in selection
@@ -243,11 +249,11 @@ export default function PianoRoll() {
         const [anchorIdx] = Object.keys(drag.origPositions)
         const orig = drag.origPositions[anchorIdx]
         updateNote(activeTrackId, parseInt(anchorIdx), {
-          duration: +Math.max(0.05, orig.duration + dx / PPS).toFixed(4)
+          duration: +Math.max(0.05, orig.duration + dx / ppsRef.current).toFixed(4)
         })
       } else {
         canvas.style.cursor = 'grabbing'
-        const dTime = dx / PPS
+        const dTime = dx / ppsRef.current
         const dNote = -Math.round(dy / PIANO_ROW_H)
         Object.entries(drag.origPositions).forEach(([idxStr, orig]) => {
           updateNote(activeTrackId, parseInt(idxStr), {
@@ -267,7 +273,7 @@ export default function PianoRoll() {
     }
 
     // Cursor hint
-    const hit = hitTest(activeTrack.notes, x, y)
+    const hit = hitTest(activeTrack.notes, x, y, ppsRef.current)
     canvas.style.cursor = hit?.zone === 'resize' ? 'ew-resize' : hit ? 'grab' : 'crosshair'
   }, [activeTrack, activeTrackId, updateNote, draw])
 
@@ -279,7 +285,7 @@ export default function PianoRoll() {
       if (dx < 4 && dy < 4) {
         const spb = 60 / bpm
         const snapUnit = spb / 4
-        const snapped = Math.round((m.sx / PPS) / snapUnit) * snapUnit
+        const snapped = Math.round((m.sx / ppsRef.current) / snapUnit) * snapUnit
         const midi = Math.max(MIDI_MIN, Math.min(MIDI_MAX, MIDI_MAX - Math.floor(m.sy / PIANO_ROW_H)))
         setTrackNotes(activeTrackId, [...activeTrack.notes, {
           note: midi, start_time: +snapped.toFixed(4), duration: +spb.toFixed(4), velocity: 80,
@@ -302,6 +308,101 @@ export default function PianoRoll() {
       window.removeEventListener('mouseup', handleMouseUp)
     }
   }, [handleMouseMove, handleMouseUp])
+
+  // ── Touch handlers ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    let tapStart = null       // { x, y, time }
+    let longPressTimer = null
+    let pinchStart = null     // { dist, pps }
+
+    const pinchDist = (e) => {
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      return Math.sqrt(dx * dx + dy * dy)
+    }
+
+    const onTouchStart = (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault()
+        clearTimeout(longPressTimer)
+        tapStart = null
+        pinchStart = { dist: pinchDist(e), pps: ppsRef.current }
+        return
+      }
+      if (e.touches.length === 1) {
+        const pos = touchPos(e.touches[0])
+        tapStart = { x: pos.x, y: pos.y, time: Date.now() }
+        longPressTimer = setTimeout(() => {
+          const hit = hitTest(activeTrack.notes, pos.x, pos.y, ppsRef.current)
+          if (hit) {
+            if (selectedRef.current.has(hit.index) && selectedRef.current.size > 1) {
+              setTrackNotes(activeTrackId, activeTrack.notes.filter((_, i) => !selectedRef.current.has(i)))
+            } else {
+              deleteNote(activeTrackId, hit.index)
+            }
+            syncSelection(new Set())
+            draw()
+          }
+          tapStart = null
+        }, 500)
+      }
+    }
+
+    const onTouchMove = (e) => {
+      if (e.touches.length === 2 && pinchStart) {
+        e.preventDefault()
+        const ratio = pinchDist(e) / pinchStart.dist
+        ppsRef.current = Math.max(40, Math.min(400, Math.round(pinchStart.pps * ratio)))
+        draw()
+        return
+      }
+      if (e.touches.length === 1 && tapStart) {
+        const pos = touchPos(e.touches[0])
+        const moved = Math.abs(pos.x - tapStart.x) + Math.abs(pos.y - tapStart.y)
+        if (moved > 10) {
+          clearTimeout(longPressTimer)
+          tapStart = null  // finger is scrolling; cancel tap/long-press
+        }
+      }
+    }
+
+    const onTouchEnd = (e) => {
+      clearTimeout(longPressTimer)
+      if (tapStart && e.touches.length === 0) {
+        const elapsed = Date.now() - tapStart.time
+        if (elapsed < 200) {
+          const { x, y } = tapStart
+          const hit = hitTest(activeTrack.notes, x, y, ppsRef.current)
+          if (!hit) {
+            const spb = 60 / bpm
+            const snapUnit = spb / 4
+            const snapped = Math.round((x / ppsRef.current) / snapUnit) * snapUnit
+            const midi = Math.max(MIDI_MIN, Math.min(MIDI_MAX, MIDI_MAX - Math.floor(y / PIANO_ROW_H)))
+            setTrackNotes(activeTrackId, [...activeTrack.notes, {
+              note: midi, start_time: +snapped.toFixed(4), duration: +spb.toFixed(4), velocity: 80,
+            }])
+            syncSelection(new Set())
+            draw()
+          }
+        }
+      }
+      tapStart = null
+      pinchStart = null
+    }
+
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false })
+    canvas.addEventListener('touchmove',  onTouchMove,  { passive: false })
+    canvas.addEventListener('touchend',   onTouchEnd,   { passive: true })
+
+    return () => {
+      canvas.removeEventListener('touchstart', onTouchStart)
+      canvas.removeEventListener('touchmove',  onTouchMove)
+      canvas.removeEventListener('touchend',   onTouchEnd)
+    }
+  }, [activeTrack, activeTrackId, bpm, setTrackNotes, deleteNote, draw])
 
   // ── Copy / Paste keyboard shortcuts ───────────────────────────────────────
   useEffect(() => {
@@ -378,7 +479,7 @@ export default function PianoRoll() {
             width={900} height={canvasH}
             onMouseDown={handleMouseDown}
             onContextMenu={e => e.preventDefault()}
-            style={{ display: 'block', cursor: 'crosshair', userSelect: 'none' }}
+            style={{ display: 'block', cursor: 'crosshair', userSelect: 'none', touchAction: 'manipulation' }}
           />
         </div>
       </div>
