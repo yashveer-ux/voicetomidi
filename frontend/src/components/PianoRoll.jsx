@@ -41,10 +41,10 @@ export default function PianoRoll() {
   const activeTrack = tracks.find(t => t.id === activeTrackId) || tracks[0]
   const bpm = useProjectStore(s => s.bpm)
 
-  const syncSelection = (set) => {
+  const syncSelection = useCallback((set) => {
     selectedRef.current = set
     setSelectedNoteIndices([...set])
-  }
+  }, [setSelectedNoteIndices])
 
   const allNotes = tracks.flatMap(t => t.notes)
   const maxTime  = allNotes.length
@@ -149,7 +149,7 @@ export default function PianoRoll() {
   useEffect(() => { draw() }, [draw])
 
   // Clear selection when active track changes
-  useEffect(() => { syncSelection(new Set()); draw() }, [activeTrackId])
+  useEffect(() => { syncSelection(new Set()); draw() }, [activeTrackId, syncSelection, draw])
 
   // ── Canvas coords ─────────────────────────────────────────────────────────
   const canvasPos = e => {
@@ -402,7 +402,7 @@ export default function PianoRoll() {
       canvas.removeEventListener('touchmove',  onTouchMove)
       canvas.removeEventListener('touchend',   onTouchEnd)
     }
-  }, [activeTrack, activeTrackId, bpm, setTrackNotes, deleteNote, draw])
+  }, [activeTrack, activeTrackId, bpm, setTrackNotes, deleteNote, draw, syncSelection])
 
   // ── Copy / Paste keyboard shortcuts ───────────────────────────────────────
   useEffect(() => {
