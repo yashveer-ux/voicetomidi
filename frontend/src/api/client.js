@@ -65,3 +65,21 @@ export async function loadProject(projectId) {
   if (!res.ok) throw new Error('Project not found')
   return res.json()
 }
+
+// Create a Stripe Checkout session for a paid export
+export async function createCheckout(format) {
+  const res = await post('/checkout', { format })
+  return res.json() // { session_id, checkout_url }
+}
+
+// Verify a paid Stripe session and download the exported file
+export async function verifiedExport(sessionId, format, notes, bpm, instrument) {
+  const res = await post('/export/verified', {
+    session_id: sessionId,
+    format,
+    notes,
+    bpm,
+    instrument,
+  })
+  return res.blob()
+}

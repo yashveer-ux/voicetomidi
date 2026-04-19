@@ -9,6 +9,7 @@ import ExportPanel from './components/ExportPanel'
 import ChordPanel from './components/ChordPanel'
 import { useSoundfont } from './hooks/useSoundfont'
 import useProjectStore from './store/projectStore'
+import { verifiedExport } from './api/client'
 
 export default function App() {
   const { tracks, activeTrackId, bpm, setIsPlaying, setPlayheadPosition } = useProjectStore()
@@ -20,6 +21,7 @@ export default function App() {
   const [isLooping, setIsLooping] = useState(false)
   const [loopBars, setLoopBars] = useState(4)
   const [backendStatus, setBackendStatus] = useState('checking')
+  const [exportCancelled, setExportCancelled] = useState(false)
 
   const activeTrack = tracks.find(t => t.id === activeTrackId) || tracks[0]
 
@@ -32,6 +34,40 @@ export default function App() {
     const id = setInterval(check, 5000)
     return () => clearInterval(id)
   }, [])
+
+  // Handle Stripe return — success or cancel
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const sessionId = params.get('session_id')
+    const cancelled = params.get('export_cancelled')
+
+    // Clean up URL immediately regardless of outcome
+    window.history.replaceState({}, '', '/')
+
+    if (sessionId) {
+      const key = `vtm_pending_export_${sessionId}`
+      const raw = localStorage.getItem(key)
+      if (!raw) return
+      const { format, notes, bpm: exportBpm, instrument, projectName } = JSON.parse(raw)
+      localStorage.removeItem(key)
+
+      verifiedExport(sessionId, format, notes, exportBpm, instrument)
+        .then(blob => {
+          const ext = format === 'midi' ? 'mid' : format
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(blob)
+          a.download = `${projectName || 'export'}.${ext}`
+          a.click()
+          URL.revokeObjectURL(a.href)
+        })
+        .catch(err => console.error('Export failed after payment:', err))
+    }
+
+    if (cancelled) {
+      setExportCancelled(true)
+      setTimeout(() => setExportCancelled(false), 100)
+    }
+  }, []) // runs once on mount
 
   // Keep loopDurationRef in sync so the animation loop always reads the latest value
   useEffect(() => {
@@ -148,7 +184,7 @@ export default function App() {
 
         {/* Right: Export */}
         <div style={s.right} className="export-panel">
-          <ExportPanel />
+          <ExportPanel autoOpenPicker={exportCancelled} />
         </div>
       </div>
     </div>

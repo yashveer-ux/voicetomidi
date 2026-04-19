@@ -1,14 +1,8 @@
-import { useState } from 'react'
-import { exportProject, saveProject, listProjects, loadProject } from '../api/client'
+import { useState, useEffect } from 'react'
+import { createCheckout, saveProject, listProjects, loadProject } from '../api/client'
 import useProjectStore from '../store/projectStore'
 
-function download(blob, name) {
-  const url = URL.createObjectURL(blob)
-  Object.assign(document.createElement('a'), { href: url, download: name }).click()
-  URL.revokeObjectURL(url)
-}
-
-export default function ExportPanel() {
+export default function ExportPanel({ autoOpenPicker = false }) {
   const { tracks, bpm, projectName, setProjectName, setProjectId, reset } = useProjectStore()
   const notes = tracks.flatMap(t => t.notes)
   const instrument = tracks.find(t => t.type === 'instrument')?.instrument || 'piano'
@@ -17,16 +11,29 @@ export default function ExportPanel() {
   const [loading, setLoading] = useState(false)
   const [projects, setProjects] = useState([])
   const [showLoad, setShowLoad] = useState(false)
+  const [showFormatPicker, setShowFormatPicker] = useState(false)
 
-  const handleExport = async (fmt) => {
+  // Auto-open picker when returning from a cancelled Stripe session
+  useEffect(() => {
+    if (autoOpenPicker) setShowFormatPicker(true)
+  }, [autoOpenPicker])
+
+  const handleCheckout = async (fmt) => {
     setLoading(true)
-    setStatus(`Exporting ${fmt.toUpperCase()}…`)
+    setShowFormatPicker(false)
+    setStatus('Opening checkout…')
     try {
-      const blob = await exportProject(notes, [], instrument, bpm, fmt)
-      download(blob, `${projectName}.${fmt === 'midi' ? 'mid' : fmt}`)
-      setStatus(`✓ Exported`)
-    } catch (e) { setStatus(`Error: ${e.message}`) }
-    finally { setLoading(false) }
+      const { session_id, checkout_url } = await createCheckout(fmt)
+      // Save pending export data so we can retrieve it after the redirect
+      localStorage.setItem(
+        `vtm_pending_export_${session_id}`,
+        JSON.stringify({ format: fmt, notes, bpm, instrument, projectName })
+      )
+      window.location.href = checkout_url
+    } catch (e) {
+      setStatus(`Error: ${e.message}`)
+      setLoading(false)
+    }
   }
 
   const handleSave = async () => {
@@ -34,7 +41,7 @@ export default function ExportPanel() {
     try {
       const r = await saveProject({ name: projectName, bpm, instrument, notes })
       setProjectId(r.project_id)
-      setStatus(`✓ Saved`)
+      setStatus('✓ Saved')
     } catch (e) { setStatus(`Error: ${e.message}`) }
     finally { setLoading(false) }
   }
@@ -72,17 +79,31 @@ export default function ExportPanel() {
       <div style={s.divider} />
       <span style={s.exportLabel}>EXPORT</span>
 
-      <div style={s.row}>
-        {['wav','mp3','midi'].map(fmt => (
+      {!showFormatPicker ? (
+        <div style={s.row}>
           <button
-            key={fmt} style={s.exportBtn}
-            onClick={() => handleExport(fmt)}
+            style={s.exportMainBtn}
+            onClick={() => setShowFormatPicker(true)}
             disabled={loading || notes.length === 0}
           >
-            {fmt.toUpperCase()}
+            ↓ Export · €1.00
           </button>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div style={s.row}>
+          {['wav', 'mp3', 'midi'].map(fmt => (
+            <button
+              key={fmt}
+              style={s.exportBtn}
+              onClick={() => handleCheckout(fmt)}
+              disabled={loading}
+            >
+              {fmt.toUpperCase()}
+            </button>
+          ))}
+          <button style={s.cancelBtn} onClick={() => setShowFormatPicker(false)}>✕</button>
+        </div>
+      )}
 
       {status && (
         <p style={{ ...s.status, color: status.startsWith('✓') ? 'var(--teal)' : '#e74c3c' }}>
@@ -133,11 +154,23 @@ const s = {
   },
   divider: { height: 1, background: '#c8c6c2', margin: '8px 0' },
   exportLabel: { display: 'block', fontFamily: 'var(--font-mono)', fontSize: 9, color: '#888684', letterSpacing: 1.5, marginBottom: 8 },
+  exportMainBtn: {
+    flex: 1, background: 'var(--accent)', color: '#fff', border: 'none',
+    borderRadius: 'var(--radius)', padding: '8px 14px',
+    fontWeight: 700, fontSize: 12, fontFamily: 'var(--font-mono)',
+    boxShadow: '0 0 10px var(--accent-glow)', letterSpacing: 0.5,
+    cursor: 'pointer',
+  },
   exportBtn: {
     background: '#e4e2de', color: 'var(--purple)',
     border: '1px solid #c8c6c2', borderRadius: 'var(--radius)',
     padding: '6px 14px', fontWeight: 700, fontSize: 11,
     fontFamily: 'var(--font-mono)', letterSpacing: 1,
+  },
+  cancelBtn: {
+    background: 'transparent', color: '#888684',
+    border: '1px solid #c8c6c2', borderRadius: 'var(--radius)',
+    padding: '6px 10px', fontSize: 11, cursor: 'pointer',
   },
   status: { fontSize: 11, marginTop: 6, fontFamily: 'var(--font-mono)' },
   modal: { background: '#e4e2de', border: '1px solid #c8c6c2', borderRadius: 'var(--radius)', padding: 10, marginTop: 8 },
