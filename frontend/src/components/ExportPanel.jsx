@@ -90,6 +90,10 @@ export default function ExportPanel() {
         ☕ Buy me a coffee
       </a>
 
+      <a href="/privacy.html" target="_blank" rel="noopener noreferrer" style={s.privacyLink}>
+        Privacy Policy
+      </a>
+
     </div>
   )
 }
@@ -129,6 +133,11 @@ const s = {
     padding: '6px 10px', fontSize: 11, cursor: 'pointer',
   },
   status: { fontSize: 11, marginTop: 6, fontFamily: 'var(--font-mono)' },
+  privacyLink: {
+    display: 'block', textAlign: 'center', marginTop: 6,
+    fontSize: 10, color: '#888684', fontFamily: 'var(--font-mono)',
+    textDecoration: 'none', letterSpacing: 0.5,
+  },
   coffeeBtn: {
     display: 'block', textAlign: 'center',
     background: '#FFDD00', color: '#000',
