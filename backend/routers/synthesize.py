@@ -18,7 +18,7 @@ class Note(BaseModel):
 
 
 class SynthRequest(BaseModel):
-    notes: List[Note]
+    notes: List[Note] = Field(max_length=500)
     instrument: str = "piano"
     bpm: float = Field(default=120.0, ge=20, le=300)
 

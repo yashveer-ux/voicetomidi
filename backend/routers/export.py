@@ -20,7 +20,7 @@ class Note(BaseModel):
 
 
 class ExportRequest(BaseModel):
-    notes: List[Note] = []
+    notes: List[Note] = Field(default=[], max_length=500)
     instrument: str = "piano"
     bpm: float = Field(default=120.0, ge=20, le=300)
     format: str = "wav"
