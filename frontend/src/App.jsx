@@ -100,6 +100,45 @@ export default function App() {
     await playNotes(track.notes, track.instrument, track.volume ?? 1)
   }, [playNotes])
 
+  const selLoopDurRef = useRef(0)
+
+  const handleSelectionLoop = useCallback(async () => {
+    const { selectedNoteIndices } = useProjectStore.getState()
+    if (!selectedNoteIndices.length) return
+
+    const selected = activeTrack.notes.filter((_, i) => selectedNoteIndices.includes(i))
+    if (!selected.length) return
+
+    const minStart = Math.min(...selected.map(n => n.start_time))
+    const maxEnd   = Math.max(...selected.map(n => n.start_time + n.duration))
+    const loopDur  = maxEnd - minStart
+    const notes    = selected.map(n => ({ ...n, start_time: +(n.start_time - minStart).toFixed(4) }))
+
+    selLoopDurRef.current = loopDur
+    setIsPlaying(true)
+
+    const ctx = getCtx()
+    if (ctx.state === 'suspended') await ctx.resume()
+    await loadInstrument(activeTrack.instrument)
+
+    const schedule = (startTime) => {
+      startRef.current = startTime
+      playNotes(notes, activeTrack.instrument, activeTrack.volume ?? 1, startTime)
+    }
+
+    schedule(ctx.currentTime + 0.05)
+    cancelAnimationFrame(rafRef.current)
+
+    const animate = () => {
+      const elapsed = ctx.currentTime - startRef.current
+      const dur = selLoopDurRef.current
+      if (elapsed >= dur) schedule(startRef.current + dur)
+      setPlayheadPosition(Math.max(0, elapsed))
+      rafRef.current = requestAnimationFrame(animate)
+    }
+    rafRef.current = requestAnimationFrame(animate)
+  }, [activeTrack, getCtx, loadInstrument, playNotes, setIsPlaying, setPlayheadPosition])
+
   return (
     <div style={s.app} className="app-root">
       {/* ── Header ── */}
@@ -130,7 +169,7 @@ export default function App() {
         {/* Center: Roll + controls */}
         <div style={s.center} className="app-center">
           <ArrangementView />
-          <PianoRoll />
+          <PianoRoll onLoopSelection={handleSelectionLoop} />
 
           {/* Active track controls */}
           <div style={s.controls}>

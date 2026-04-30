@@ -29,7 +29,7 @@ function hitTest(notes, x, y, pps) {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export default function PianoRoll() {
+export default function PianoRoll({ onLoopSelection }) {
   const canvasRef = useRef(null)
   const dragRef   = useRef(null)   // active note drag
   const marqueeRef = useRef(null)  // { sx, sy, ex, ey } while rubber-band selecting
@@ -37,7 +37,7 @@ export default function PianoRoll() {
   const clipboardRef = useRef([])  // copied notes (relative to selection start)
   const ppsRef = useRef(PPS_BASE)
 
-  const { tracks, activeTrackId, updateNote, deleteNote, setTrackNotes, playheadPosition, setSelectedNoteIndices } = useProjectStore()
+  const { tracks, activeTrackId, updateNote, deleteNote, setTrackNotes, playheadPosition, setSelectedNoteIndices, selectedNoteIndices } = useProjectStore()
   const activeTrack = tracks.find(t => t.id === activeTrackId) || tracks[0]
   const bpm = useProjectStore(s => s.bpm)
 
@@ -541,6 +541,9 @@ export default function PianoRoll() {
             ))}
           </div>
         )}
+        {selectedNoteIndices.length > 0 && onLoopSelection && (
+          <button style={s.loopSelBtn} onClick={onLoopSelection}>↻ Loop Selection</button>
+        )}
         <span style={s.hint}>Tap to add · Drag to move · Right-edge to resize · Tap note to select · Long-press to delete · Pinch to zoom · Desktop: Shift+click multi-select · Right-click delete · ⌘C/⌘V</span>
       </div>
 
@@ -573,6 +576,13 @@ const s = {
   legend: { display: 'flex', gap: 12 },
   legendItem: { display: 'flex', alignItems: 'center', gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: '50%', transition: 'box-shadow 0.2s' },
+  loopSelBtn: {
+    background: 'var(--teal)', color: '#000', border: 'none',
+    borderRadius: 'var(--radius)', padding: '4px 10px',
+    fontWeight: 700, fontSize: 11, fontFamily: 'var(--font-mono)',
+    letterSpacing: 0.5, cursor: 'pointer',
+    boxShadow: '0 0 8px var(--teal-glow)', flexShrink: 0,
+  },
   hint: { fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', marginLeft: 'auto' },
   rollRow: { display: 'flex', flex: 1, overflowX: 'hidden', overflowY: 'auto', alignItems: 'flex-start' },
   keyCol: { display: 'flex', flexDirection: 'column', flexShrink: 0, borderRight: '1px solid var(--border)' },
