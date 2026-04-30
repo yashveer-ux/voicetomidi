@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 from typing import List
 from services.synth_engine import synthesize
 from services.export_service import export_wav, export_mp3, export_midi
-from limiter import limiter
+from limiter import rate_limit
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ class ExportRequest(BaseModel):
 
 
 @router.post("/export")
-@limiter.limit("10/minute")
+@rate_limit(10)
 async def export_route(request: Request, req: ExportRequest):
     if req.instrument not in VALID_INSTRUMENTS:
         raise HTTPException(status_code=400, detail=f"Invalid instrument. Choose from: {VALID_INSTRUMENTS}")

@@ -1,7 +1,6 @@
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import JSONResponse
 from services.audio_analyzer import analyze_audio
-from limiter import limiter
+from limiter import rate_limit
 
 router = APIRouter()
 
@@ -9,7 +8,7 @@ MAX_AUDIO_BYTES = 10 * 1024 * 1024  # 10MB
 
 
 @router.post("/analyze")
-@limiter.limit("10/minute")
+@rate_limit(10)
 async def analyze(
     request: Request,
     file: UploadFile = File(...),

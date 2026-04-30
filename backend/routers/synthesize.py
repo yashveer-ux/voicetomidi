@@ -3,7 +3,7 @@ from fastapi.responses import Response
 from services.synth_engine import synthesize
 from pydantic import BaseModel, Field
 from typing import List
-from limiter import limiter
+from limiter import rate_limit
 
 router = APIRouter()
 
@@ -24,7 +24,7 @@ class SynthRequest(BaseModel):
 
 
 @router.post("/synthesize")
-@limiter.limit("20/minute")
+@rate_limit(20)
 async def synthesize_route(request: Request, req: SynthRequest):
     if req.instrument not in VALID_INSTRUMENTS:
         raise HTTPException(status_code=400, detail=f"Invalid instrument. Choose from: {VALID_INSTRUMENTS}")
