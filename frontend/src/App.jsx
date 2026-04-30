@@ -9,7 +9,6 @@ import ExportPanel from './components/ExportPanel'
 import ChordPanel from './components/ChordPanel'
 import { useSoundfont } from './hooks/useSoundfont'
 import useProjectStore from './store/projectStore'
-import { verifiedExport } from './api/client'
 
 export default function App() {
   const { tracks, activeTrackId, bpm, setIsPlaying, setPlayheadPosition } = useProjectStore()
@@ -21,13 +20,12 @@ export default function App() {
   const [isLooping, setIsLooping] = useState(false)
   const [loopBars, setLoopBars] = useState(4)
   const [backendStatus, setBackendStatus] = useState('checking')
-  const [exportCancelled, setExportCancelled] = useState(false)
 
   const activeTrack = tracks.find(t => t.id === activeTrackId) || tracks[0]
 
   useEffect(() => {
     const check = () =>
-      fetch('http://localhost:8000/health')
+      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/health`)
         .then(r => r.json()).then(() => setBackendStatus('ok'))
         .catch(() => setBackendStatus('offline'))
     check()
@@ -35,39 +33,6 @@ export default function App() {
     return () => clearInterval(id)
   }, [])
 
-  // Handle Stripe return — success or cancel
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const sessionId = params.get('session_id')
-    const cancelled = params.get('export_cancelled')
-
-    // Clean up URL immediately regardless of outcome
-    window.history.replaceState({}, '', '/')
-
-    if (sessionId) {
-      const key = `vtm_pending_export_${sessionId}`
-      const raw = localStorage.getItem(key)
-      if (!raw) return
-      const { format, notes, bpm: exportBpm, instrument, projectName } = JSON.parse(raw)
-      localStorage.removeItem(key)
-
-      verifiedExport(sessionId, format, notes, exportBpm, instrument)
-        .then(blob => {
-          const ext = format === 'midi' ? 'mid' : format
-          const a = document.createElement('a')
-          a.href = URL.createObjectURL(blob)
-          a.download = `${projectName || 'export'}.${ext}`
-          a.click()
-          URL.revokeObjectURL(a.href)
-        })
-        .catch(err => console.error('Export failed after payment:', err))
-    }
-
-    if (cancelled) {
-      setExportCancelled(true)
-      setTimeout(() => setExportCancelled(false), 100)
-    }
-  }, []) // runs once on mount
 
   // Keep loopDurationRef in sync so the animation loop always reads the latest value
   useEffect(() => {
@@ -78,23 +43,18 @@ export default function App() {
   const schedulePlayback = useCallback((startTime) => {
     startRef.current = startTime
     const playableTracks = tracks.filter(t => !t.muted && t.notes.length > 0)
-    console.log('[schedulePlayback] startTime:', startTime.toFixed(3), 'tracks with notes:', playableTracks.length)
     playableTracks.forEach(track => {
-      console.log(`  → scheduling ${track.notes.length} notes for "${track.name}" (${track.instrument})`)
       playNotes(track.notes, track.instrument, track.volume ?? 1, startTime)
     })
   }, [tracks, playNotes])
 
   const handlePlay = useCallback(async () => {
     const playableTracks = tracks.filter(t => !t.muted && t.notes.length > 0)
-    console.log('[handlePlay] playableTracks:', playableTracks.map(t => ({ name: t.name, notes: t.notes.length })))
-    console.log('[handlePlay] loopDurationRef:', loopDurationRef.current)
-    if (playableTracks.length === 0) { console.warn('[handlePlay] No playable tracks — returning early'); return }
+    if (playableTracks.length === 0) return
     setIsPlaying(true)
     loopRef.current = isLooping
 
     const ctx = getCtx()
-    console.log('[handlePlay] ctx state:', ctx.state, 'currentTime:', ctx.currentTime)
 
     // Ensure context is actually running before we schedule
     if (ctx.state === 'suspended') await ctx.resume()
@@ -102,8 +62,6 @@ export default function App() {
     // Load all instruments once — only real async work happens here
     const instrTracks = playableTracks.filter(t => t.type === 'instrument')
     await Promise.all(instrTracks.map(t => loadInstrument(t.instrument)))
-
-    console.log('[handlePlay] ctx after load:', ctx.state, 'currentTime:', ctx.currentTime)
 
     // Capture startTime after loading, schedule first iteration
     schedulePlayback(ctx.currentTime + 0.05)
@@ -147,10 +105,10 @@ export default function App() {
       {/* ── Header ── */}
       <div style={s.header}>
         <div style={s.logo}>
-          <div style={s.logoMark}>V</div>
+          <div style={s.logoMark}>H</div>
           <div style={s.logoText}>
-            <span style={s.logoName}>VOICEtoMIDI</span>
-            <span style={s.logoSub}>voice to music</span>
+            <span style={s.logoName}>HUM to MIDI</span>
+            <span style={s.logoSub}>hum to music</span>
           </div>
         </div>
       </div>
@@ -184,7 +142,7 @@ export default function App() {
 
         {/* Right: Export */}
         <div style={s.right} className="export-panel">
-          <ExportPanel autoOpenPicker={exportCancelled} />
+          <ExportPanel />
         </div>
       </div>
     </div>

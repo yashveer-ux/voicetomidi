@@ -13,6 +13,9 @@ frontend/dist/
 # OS
 .DS_Store
 
+# Brainstorming
+.superpowers/
+
 # Env
 .env
 .env.local

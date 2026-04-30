@@ -1,59 +1,34 @@
-import { useState, useEffect } from 'react'
-import { createCheckout, saveProject, listProjects, loadProject } from '../api/client'
+import { useState } from 'react'
+import { exportProject } from '../api/client'
 import useProjectStore from '../store/projectStore'
 
-export default function ExportPanel({ autoOpenPicker = false }) {
-  const { tracks, bpm, projectName, setProjectName, setProjectId, reset } = useProjectStore()
+export default function ExportPanel() {
+  const { tracks, bpm, projectName, setProjectName } = useProjectStore()
   const notes = tracks.flatMap(t => t.notes)
   const instrument = tracks.find(t => t.type === 'instrument')?.instrument || 'piano'
 
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
-  const [projects, setProjects] = useState([])
-  const [showLoad, setShowLoad] = useState(false)
   const [showFormatPicker, setShowFormatPicker] = useState(false)
 
-  // Auto-open picker when returning from a cancelled Stripe session
-  useEffect(() => {
-    if (autoOpenPicker) setShowFormatPicker(true)
-  }, [autoOpenPicker])
-
-  const handleCheckout = async (fmt) => {
+  const handleExport = async (fmt) => {
     setLoading(true)
     setShowFormatPicker(false)
-    setStatus('Opening checkout…')
+    setStatus('Exporting…')
     try {
-      const { session_id, checkout_url } = await createCheckout(fmt)
-      // Save pending export data so we can retrieve it after the redirect
-      localStorage.setItem(
-        `vtm_pending_export_${session_id}`,
-        JSON.stringify({ format: fmt, notes, bpm, instrument, projectName })
-      )
-      window.location.href = checkout_url
+      const blob = await exportProject(notes, [], instrument, bpm, fmt)
+      const ext = fmt === 'midi' ? 'mid' : fmt
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${projectName || 'export'}.${ext}`
+      a.click()
+      URL.revokeObjectURL(a.href)
+      setStatus('✓ Downloaded')
     } catch (e) {
       setStatus(`Error: ${e.message}`)
+    } finally {
       setLoading(false)
     }
-  }
-
-  const handleSave = async () => {
-    setLoading(true)
-    try {
-      const r = await saveProject({ name: projectName, bpm, instrument, notes })
-      setProjectId(r.project_id)
-      setStatus('✓ Saved')
-    } catch (e) { setStatus(`Error: ${e.message}`) }
-    finally { setLoading(false) }
-  }
-
-  const handleLoad = async (pid) => {
-    const data = await loadProject(pid)
-    useProjectStore.setState({
-      instrument: data.instrument || 'piano', bpm: data.bpm || 120,
-      projectName: data.name || 'Untitled', projectId: pid,
-    })
-    setShowLoad(false)
-    setStatus(`✓ Loaded "${data.name}"`)
   }
 
   return (
@@ -70,12 +45,6 @@ export default function ExportPanel({ autoOpenPicker = false }) {
         />
       </div>
 
-      <div style={s.row}>
-        <button style={s.btn} onClick={handleSave} disabled={loading}>Save</button>
-        <button style={s.btnGhost} onClick={async () => { const r = await listProjects(); setProjects(r.projects); setShowLoad(true) }}>Load</button>
-        <button style={s.btnGhost} onClick={reset}>New</button>
-      </div>
-
       <div style={s.divider} />
       <span style={s.exportLabel}>EXPORT</span>
 
@@ -86,7 +55,7 @@ export default function ExportPanel({ autoOpenPicker = false }) {
             onClick={() => setShowFormatPicker(true)}
             disabled={loading || notes.length === 0}
           >
-            ↓ Export · €1.00
+            ↓ Export
           </button>
         </div>
       ) : (
@@ -95,7 +64,7 @@ export default function ExportPanel({ autoOpenPicker = false }) {
             <button
               key={fmt}
               style={s.exportBtn}
-              onClick={() => handleCheckout(fmt)}
+              onClick={() => handleExport(fmt)}
               disabled={loading}
             >
               {fmt.toUpperCase()}
@@ -111,19 +80,16 @@ export default function ExportPanel({ autoOpenPicker = false }) {
         </p>
       )}
 
-      {showLoad && (
-        <div style={s.modal}>
-          <p style={s.modalTitle}>Saved Projects</p>
-          {projects.length === 0 && <p style={s.modalEmpty}>No saved projects</p>}
-          {projects.map(p => (
-            <div key={p.project_id} style={s.projectRow} onClick={() => handleLoad(p.project_id)}>
-              <span style={s.projectName}>{p.name}</span>
-              <span style={s.projectId}>#{p.project_id}</span>
-            </div>
-          ))}
-          <button style={s.btnGhost} onClick={() => setShowLoad(false)}>Cancel</button>
-        </div>
-      )}
+      <div style={s.divider} />
+      <a
+        href="https://buymeacoffee.com/monkeyswag1411"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={s.coffeeBtn}
+      >
+        ☕ Buy me a coffee
+      </a>
+
     </div>
   )
 }
@@ -141,16 +107,6 @@ const s = {
     flex: 1, background: '#e4e2de', border: '1px solid #c8c6c2',
     borderRadius: 'var(--radius)', color: '#3a3a38', padding: '6px 10px',
     fontSize: 12, fontFamily: 'var(--font-ui)',
-  },
-  btn: {
-    background: 'var(--teal)', color: '#000', border: 'none',
-    borderRadius: 'var(--radius)', padding: '6px 14px',
-    fontWeight: 700, fontSize: 11, boxShadow: '0 0 8px var(--teal-glow)',
-  },
-  btnGhost: {
-    background: '#e4e2de', color: '#686664',
-    border: '1px solid #c8c6c2', borderRadius: 'var(--radius)',
-    padding: '6px 12px', fontWeight: 600, fontSize: 11,
   },
   divider: { height: 1, background: '#c8c6c2', margin: '8px 0' },
   exportLabel: { display: 'block', fontFamily: 'var(--font-mono)', fontSize: 9, color: '#888684', letterSpacing: 1.5, marginBottom: 8 },
@@ -173,14 +129,12 @@ const s = {
     padding: '6px 10px', fontSize: 11, cursor: 'pointer',
   },
   status: { fontSize: 11, marginTop: 6, fontFamily: 'var(--font-mono)' },
-  modal: { background: '#e4e2de', border: '1px solid #c8c6c2', borderRadius: 'var(--radius)', padding: 10, marginTop: 8 },
-  modalTitle: { fontFamily: 'var(--font-mono)', fontSize: 10, color: '#686664', marginBottom: 8 },
-  modalEmpty: { fontSize: 11, color: '#888684' },
-  projectRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '6px 8px', cursor: 'pointer', borderRadius: 'var(--radius)',
-    background: '#d8d6d2', marginBottom: 4,
+  coffeeBtn: {
+    display: 'block', textAlign: 'center',
+    background: '#FFDD00', color: '#000',
+    border: 'none', borderRadius: 'var(--radius)',
+    padding: '7px 14px', fontWeight: 700, fontSize: 12,
+    fontFamily: 'var(--font-ui)', textDecoration: 'none',
+    marginTop: 4,
   },
-  projectName: { fontSize: 12, color: '#3a3a38' },
-  projectId: { fontSize: 10, color: '#888684', fontFamily: 'var(--font-mono)' },
 }

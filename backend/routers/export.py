@@ -1,35 +1,39 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import List
 from services.synth_engine import synthesize
 from services.export_service import export_wav, export_mp3, export_midi
-import os
-import stripe
-
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-
-_used_sessions: set = set()
+from limiter import limiter
 
 router = APIRouter()
 
+VALID_INSTRUMENTS = {"piano", "guitar", "synth", "strings"}
+VALID_FORMATS = {"wav", "mp3", "midi"}
+
 
 class Note(BaseModel):
-    note: int
-    start_time: float
-    duration: float
-    velocity: int = 80
+    note: int = Field(ge=0, le=127)
+    start_time: float = Field(ge=0, le=300)
+    duration: float = Field(ge=0.01, le=30)
+    velocity: int = Field(default=80, ge=0, le=127)
 
 
 class ExportRequest(BaseModel):
     notes: List[Note] = []
     instrument: str = "piano"
-    bpm: float = 120.0
-    format: str = "wav"  # "wav" | "mp3" | "midi"
+    bpm: float = Field(default=120.0, ge=20, le=300)
+    format: str = "wav"
 
 
 @router.post("/export")
-async def export_route(req: ExportRequest):
+@limiter.limit("10/minute")
+async def export_route(request: Request, req: ExportRequest):
+    if req.instrument not in VALID_INSTRUMENTS:
+        raise HTTPException(status_code=400, detail=f"Invalid instrument. Choose from: {VALID_INSTRUMENTS}")
+    if req.format not in VALID_FORMATS:
+        raise HTTPException(status_code=400, detail=f"Invalid format. Choose from: {VALID_FORMATS}")
+
     notes_dicts = [n.model_dump() for n in req.notes]
 
     if req.format == "midi":
@@ -45,10 +49,7 @@ async def export_route(req: ExportRequest):
     if req.format == "mp3":
         mp3_bytes = export_mp3(wav_bytes_melody, b"")
         if mp3_bytes is None:
-            raise HTTPException(
-                status_code=422,
-                detail="MP3 export requires ffmpeg. Install it with: brew install ffmpeg",
-            )
+            raise HTTPException(status_code=422, detail="MP3 export requires ffmpeg.")
         return Response(
             content=mp3_bytes,
             media_type="audio/mpeg",
@@ -60,58 +61,4 @@ async def export_route(req: ExportRequest):
         content=wav_bytes,
         media_type="audio/wav",
         headers={"Content-Disposition": "attachment; filename=hummed_export.wav"},
-    )
-
-
-class VerifiedExportRequest(BaseModel):
-    session_id: str
-    format: str  # "wav" | "mp3" | "midi"
-    notes: List[Note] = []
-    instrument: str = "piano"
-    bpm: float = 120.0
-
-
-@router.post("/export/verified")
-async def export_verified(req: VerifiedExportRequest):
-    # Verify payment with Stripe
-    session = stripe.checkout.Session.retrieve(req.session_id)
-    if session.payment_status != "paid":
-        raise HTTPException(status_code=402, detail="Payment required")
-
-    # Prevent replay
-    if req.session_id in _used_sessions:
-        raise HTTPException(status_code=409, detail="Session already used")
-    _used_sessions.add(req.session_id)
-
-    # Generate file (same logic as /export)
-    notes_dicts = [n.model_dump() for n in req.notes]
-
-    if req.format == "midi":
-        midi_bytes = export_midi(notes_dicts, [], bpm=req.bpm)
-        return Response(
-            content=midi_bytes,
-            media_type="audio/midi",
-            headers={"Content-Disposition": "attachment; filename=export.mid"},
-        )
-
-    wav_bytes = synthesize(notes_dicts, instrument=req.instrument, bpm=req.bpm)
-
-    if req.format == "mp3":
-        mp3_bytes = export_mp3(wav_bytes, b"")
-        if mp3_bytes is None:
-            raise HTTPException(
-                status_code=422,
-                detail="MP3 export requires ffmpeg.",
-            )
-        return Response(
-            content=mp3_bytes,
-            media_type="audio/mpeg",
-            headers={"Content-Disposition": "attachment; filename=export.mp3"},
-        )
-
-    wav_out = export_wav(wav_bytes, b"")
-    return Response(
-        content=wav_out,
-        media_type="audio/wav",
-        headers={"Content-Disposition": "attachment; filename=export.wav"},
     )

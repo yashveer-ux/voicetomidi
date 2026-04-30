@@ -84,18 +84,20 @@ Backend at http://localhost:8000
 
 ---
 
-## Remaining Before Deployment
+## Deployed ✅
 
-### Must-have
-- [ ] Mobile-responsive layout
-- [ ] Hosting decision: Railway (backend) + Vercel (frontend) recommended
-- [ ] Stripe one-time purchase payment gate
+- [x] Mobile-responsive layout
+- [x] Hosting: Railway (backend) + Vercel (frontend) — live at https://voicetomidi.vercel.app
+- [x] Stripe €1.00 per export (checkout.py)
+- [x] Multi-track melody stacking
+- [x] ChordPanel — chord insertion into piano roll
+- [x] DrumPadGrid — per-pad recording + beatbox analysis
 
-### Nice-to-have
+## Remaining (Post-Launch Polish)
+
 - [ ] Error tracking (Sentry — ~30 min)
-- [ ] Traffic analytics (Plausible or Vercel Analytics — ~5 min)
-- [ ] WebSocket playhead sync wired to frontend
-- [ ] Multi-track melody support (stacking)
+- [ ] Traffic analytics (Vercel Analytics — ~5 min)
+- ~~WebSocket playhead sync~~ — not needed, playback is client-side
 
 ---
 

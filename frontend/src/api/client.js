@@ -47,39 +47,3 @@ export async function exportProject(notes, drumHits, instrument, bpm, format) {
   return res.blob()
 }
 
-// Save project
-export async function saveProject(state) {
-  const res = await post('/project/save', state)
-  return res.json() // { project_id }
-}
-
-// List projects
-export async function listProjects() {
-  const res = await fetch(`${BASE}/project/list`)
-  return res.json()
-}
-
-// Load project
-export async function loadProject(projectId) {
-  const res = await fetch(`${BASE}/project/${projectId}`)
-  if (!res.ok) throw new Error('Project not found')
-  return res.json()
-}
-
-// Create a Stripe Checkout session for a paid export
-export async function createCheckout(format) {
-  const res = await post('/checkout', { format })
-  return res.json() // { session_id, checkout_url }
-}
-
-// Verify a paid Stripe session and download the exported file
-export async function verifiedExport(sessionId, format, notes, bpm, instrument) {
-  const res = await post('/export/verified', {
-    session_id: sessionId,
-    format,
-    notes,
-    bpm,
-    instrument,
-  })
-  return res.blob()
-}
