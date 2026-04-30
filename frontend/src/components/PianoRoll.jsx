@@ -314,44 +314,79 @@ export default function PianoRoll() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    let tapStart = null       // { x, y, time }
-    let longPressTimer = null
-    let pinchStart = null     // { dist, pps }
+    const DRAG_THRESHOLD = 12
+    const LONG_PRESS_MS  = 550
+    const TAP_MS         = 250
+    const TOUCH_RESIZE   = 20   // larger resize zone for fingers
 
-    const pinchDist = (e) => {
+    let tapStart      = null  // { x, y, time, hit }
+    let pendingDrag   = null  // prepared drag state before threshold crossed
+    let activeDrag    = false // true once finger has moved enough
+    let longPressTimer = null
+    let pinchStart    = null  // { dist, pps }
+
+    const pinchDist = e => {
       const dx = e.touches[0].clientX - e.touches[1].clientX
       const dy = e.touches[0].clientY - e.touches[1].clientY
       return Math.sqrt(dx * dx + dy * dy)
     }
 
-    const onTouchStart = (e) => {
+    // Larger resize zone for touch
+    const touchHit = (notes, x, y) => {
+      for (let i = notes.length - 1; i >= 0; i--) {
+        const n = notes[i]
+        const nx = n.start_time * ppsRef.current, nw = Math.max(n.duration * ppsRef.current, 6)
+        const ny = (MIDI_MAX - n.note) * PIANO_ROW_H
+        if (x >= nx && x <= nx + nw && y >= ny && y < ny + PIANO_ROW_H)
+          return { index: i, zone: x >= nx + nw - TOUCH_RESIZE ? 'resize' : 'move' }
+      }
+      return null
+    }
+
+    const onTouchStart = e => {
       if (e.touches.length === 2) {
         e.preventDefault()
         clearTimeout(longPressTimer)
-        tapStart = null
+        tapStart = pendingDrag = null
+        activeDrag = false
         pinchStart = { dist: pinchDist(e), pps: ppsRef.current }
         return
       }
-      if (e.touches.length === 1) {
-        const pos = touchPos(e.touches[0])
-        tapStart = { x: pos.x, y: pos.y, time: Date.now() }
+      if (e.touches.length !== 1) return
+
+      const pos = touchPos(e.touches[0])
+      const hit = touchHit(activeTrack.notes, pos.x, pos.y)
+      tapStart = { x: pos.x, y: pos.y, time: Date.now(), hit }
+      activeDrag = false
+
+      if (hit) {
+        // Prepare drag — include all selected notes if this note is selected
+        const indices = selectedRef.current.has(hit.index) && selectedRef.current.size > 0
+          ? [...selectedRef.current]
+          : [hit.index]
+        const origPositions = {}
+        indices.forEach(i => {
+          const n = activeTrack.notes[i]
+          if (n) origPositions[i] = { start_time: n.start_time, note: n.note, duration: n.duration }
+        })
+        pendingDrag = { zone: hit.zone, startX: pos.x, startY: pos.y, origPositions, hitIndex: hit.index }
+
+        // Long press → delete
         longPressTimer = setTimeout(() => {
-          const hit = hitTest(activeTrack.notes, pos.x, pos.y, ppsRef.current)
-          if (hit) {
-            if (selectedRef.current.has(hit.index) && selectedRef.current.size > 1) {
-              setTrackNotes(activeTrackId, activeTrack.notes.filter((_, i) => !selectedRef.current.has(i)))
-            } else {
-              deleteNote(activeTrackId, hit.index)
-            }
-            syncSelection(new Set())
-            draw()
+          if (activeDrag) return
+          if (selectedRef.current.has(hit.index) && selectedRef.current.size > 1) {
+            setTrackNotes(activeTrackId, activeTrack.notes.filter((_, i) => !selectedRef.current.has(i)))
+          } else {
+            deleteNote(activeTrackId, hit.index)
           }
-          tapStart = null
-        }, 500)
+          syncSelection(new Set())
+          draw()
+          tapStart = pendingDrag = null
+        }, LONG_PRESS_MS)
       }
     }
 
-    const onTouchMove = (e) => {
+    const onTouchMove = e => {
       if (e.touches.length === 2 && pinchStart) {
         e.preventDefault()
         const ratio = pinchDist(e) / pinchStart.dist
@@ -359,24 +394,61 @@ export default function PianoRoll() {
         draw()
         return
       }
-      if (e.touches.length === 1 && tapStart) {
-        const pos = touchPos(e.touches[0])
-        const moved = Math.abs(pos.x - tapStart.x) + Math.abs(pos.y - tapStart.y)
-        if (moved > 10) {
-          clearTimeout(longPressTimer)
-          tapStart = null  // finger is scrolling; cancel tap/long-press
+      if (e.touches.length !== 1 || !tapStart) return
+
+      const pos = touchPos(e.touches[0])
+      const moved = Math.abs(pos.x - tapStart.x) + Math.abs(pos.y - tapStart.y)
+
+      if (moved > DRAG_THRESHOLD && pendingDrag) {
+        clearTimeout(longPressTimer)
+        e.preventDefault()
+        activeDrag = true
+
+        const dx = pos.x - pendingDrag.startX
+        const dy = pos.y - pendingDrag.startY
+
+        if (pendingDrag.zone === 'resize') {
+          const [anchorIdx] = Object.keys(pendingDrag.origPositions)
+          const orig = pendingDrag.origPositions[anchorIdx]
+          updateNote(activeTrackId, parseInt(anchorIdx), {
+            duration: +Math.max(0.05, orig.duration + dx / ppsRef.current).toFixed(4)
+          })
+        } else {
+          const dTime = dx / ppsRef.current
+          const dNote = -Math.round(dy / PIANO_ROW_H)
+          Object.entries(pendingDrag.origPositions).forEach(([idxStr, orig]) => {
+            updateNote(activeTrackId, parseInt(idxStr), {
+              start_time: +Math.max(0, orig.start_time + dTime).toFixed(4),
+              note: Math.max(MIDI_MIN, Math.min(MIDI_MAX, orig.note + dNote)),
+            })
+          })
         }
+        draw()
       }
     }
 
-    const onTouchEnd = (e) => {
+    const onTouchEnd = e => {
       clearTimeout(longPressTimer)
-      if (tapStart && e.touches.length === 0) {
+      const wasDragging = activeDrag
+      activeDrag = false
+      pendingDrag = null
+
+      if (!wasDragging && tapStart && e.changedTouches.length > 0) {
+        const pos = touchPos(e.changedTouches[0])
         const elapsed = Date.now() - tapStart.time
-        if (elapsed < 200) {
-          const { x, y } = tapStart
-          const hit = hitTest(activeTrack.notes, x, y, ppsRef.current)
-          if (!hit) {
+        const moved = Math.abs(pos.x - tapStart.x) + Math.abs(pos.y - tapStart.y)
+
+        if (elapsed < TAP_MS && moved < DRAG_THRESHOLD) {
+          const { hit } = tapStart
+          if (hit) {
+            // Tap on note → toggle selection
+            const next = new Set(selectedRef.current)
+            next.has(hit.index) ? next.delete(hit.index) : next.add(hit.index)
+            syncSelection(next)
+            draw()
+          } else {
+            // Tap on empty → create note
+            const { x, y } = tapStart
             const spb = 60 / bpm
             const snapUnit = spb / 4
             const snapped = Math.round((x / ppsRef.current) / snapUnit) * snapUnit
@@ -389,6 +461,7 @@ export default function PianoRoll() {
           }
         }
       }
+
       tapStart = null
       pinchStart = null
     }
@@ -402,7 +475,7 @@ export default function PianoRoll() {
       canvas.removeEventListener('touchmove',  onTouchMove)
       canvas.removeEventListener('touchend',   onTouchEnd)
     }
-  }, [activeTrack, activeTrackId, bpm, setTrackNotes, deleteNote, draw, syncSelection])
+  }, [activeTrack, activeTrackId, bpm, setTrackNotes, deleteNote, draw, syncSelection, updateNote])
 
   // ── Copy / Paste keyboard shortcuts ───────────────────────────────────────
   useEffect(() => {
@@ -468,7 +541,7 @@ export default function PianoRoll() {
             ))}
           </div>
         )}
-        <span style={s.hint}>Click to add · Drag to move · Right-edge to resize · Drag empty area to select · Shift+click to multi-select · Right-click to delete · ⌘C copy · ⌘V paste</span>
+        <span style={s.hint}>Tap to add · Drag to move · Right-edge to resize · Tap note to select · Long-press to delete · Pinch to zoom · Desktop: Shift+click multi-select · Right-click delete · ⌘C/⌘V</span>
       </div>
 
       <div style={s.rollRow}>
