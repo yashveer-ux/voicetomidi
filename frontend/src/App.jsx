@@ -105,7 +105,7 @@ export default function App() {
       {/* ── Header ── */}
       <div style={s.header}>
         <div style={s.logo}>
-          <div style={s.logoMark}>H</div>
+          <img src="/logo.jpg" alt="HUM to MIDI logo" style={s.logoMark} />
           <div style={s.logoText}>
             <span style={s.logoName}>HUM to MIDI</span>
             <span style={s.logoSub}>hum to music</span>
@@ -162,10 +162,8 @@ const s = {
   },
   logo: { display: 'flex', alignItems: 'center', gap: 10 },
   logoMark: {
-    width: 28, height: 28, background: 'var(--accent)', color: '#fff',
-    borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 15,
-    boxShadow: '0 0 12px var(--accent-glow)',
+    width: 34, height: 34, borderRadius: '50%',
+    objectFit: 'cover', flexShrink: 0,
   },
   logoText: { display: 'flex', flexDirection: 'column', gap: 0 },
   logoName: {
