@@ -105,7 +105,7 @@ export default function App() {
       {/* ── Header ── */}
       <div style={s.header}>
         <div style={s.logo}>
-          <img src="/logo.jpg" alt="HUM to MIDI logo" style={s.logoMark} />
+          <img src="/logo.png" alt="HUM to MIDI logo" style={s.logoMark} />
           <div style={s.logoText}>
             <span style={s.logoName}>HUM to MIDI</span>
             <span style={s.logoSub}>hum to music</span>
