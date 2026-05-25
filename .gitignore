@@ -12,8 +12,10 @@ frontend/dist/
 
 # OS
 .DS_Store
+**/.DS_Store
 
-# Brainstorming
+# Claude Code
+.claude/
 .superpowers/
 
 # Env
