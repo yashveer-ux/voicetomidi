@@ -1,6 +1,7 @@
-fastapi==0.128.8
+fastapi==0.136.3
+starlette>=1.0.1
 uvicorn[standard]==0.29.0
-python-multipart==0.0.20
+python-multipart==0.0.27
 numpy==1.26.4
 librosa==0.10.2
 soundfile==0.12.1
@@ -8,6 +9,9 @@ mido==1.3.2
 pydub==0.25.1
 pyfluidsynth==1.3.3
 websockets==12.0
-pytest==8.4.2
-pytest-asyncio==0.23.6
+pytest==9.0.3
+pytest-asyncio==1.3.0
 httpx==0.27.0
+requests>=2.33.0
+urllib3>=2.7.0
+python-dotenv>=1.2.2
